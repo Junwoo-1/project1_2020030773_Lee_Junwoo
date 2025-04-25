@@ -38,7 +38,7 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
 
     find_path(request_buff); // request에서 경로 추출
 
-    FILE *file = fopen(path, "r"); // 클라이언트에게 보낼 html 파일
+    FILE *file = fopen(path, "rb"); // 클라이언트에게 보낼 html 파일
     if(file == NULL) { // 파일이 없을 경우 404 에러 페이지를 출력.
         char not_found[512];
         snprintf(not_found, sizeof(not_found), NOT_FOUND_HEADER);
@@ -54,13 +54,15 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
 
     // HTTP 헤더 먼저 전송
     char header[512]; // 전송할 헤더용 버퍼
-    snprintf(header, sizeof(header), HTML_HEADER, file_size);
+    snprintf(header, sizeof(header), HTML_HEADER, file_size); // html, jpg, png 등등 파일 종류 따라서 케이스 나누기
     send(clt_socket, header, strlen(header), 0);
     printf("Successfully Sending header:\n%sFile name is %s\nNow Transporting Data...\n", header, path);    
     
     // 데이터 전송
-    ssize_t sent = 0; // 보낸 파일의 바이트 크기
+    char test_buff[25]; // 분할전송 테스트용 버퍼
+
     while((read_bytes = fread(content_buff, 1, BUFF_SIZE, file)) > 0) { // 파일 읽기
+        ssize_t sent = 0; // 보낸 파일의 바이트 크기
         while(sent < read_bytes) {
             printf("%ld Bytes Data read\n", read_bytes);
             ssize_t sending_bytes = send(clt_socket, content_buff + sent, read_bytes - sent, 0); // 클라이언트에게 전송한 파일
