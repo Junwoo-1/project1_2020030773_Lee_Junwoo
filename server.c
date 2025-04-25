@@ -6,31 +6,69 @@
 #include <sys/types.h> 
 #include <netinet/in.h> 
 #include <arpa/inet.h>
+#include "http_header.h"
 
 #define BUFF_SIZE 8192
-#define NOT_FOUND "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
 
-void send_response(int clt_socket) { // Response를 보내는 함수
-    FILE *file = fopen("index.html", "r"); // 클라이언트에게 보낼 html 파일
-    if(file == NULL) { // 파일이 없을 경우 404 에러를 출력.
-        char *not_found = NOT_FOUND;
+long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구하는 함수
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    return size;
+}
+
+void send_response(int clt_socket, char* request_buff) { // Response를 보내는 함수, 소켓 + 디렉토리
+    // 보낼 파일 경로 추출하기
+    char path[512]; // 파일 디렉토리
+    sscanf(request_buff, "GET %s HTTP/1.1", path); // 파일 디렉토리를 저장하는 버퍼에 request로 받은 디렉토리 저장
+    
+    if (strcmp(path, "/") == 0) { // 경로가 루트일 경우 index.html
+        strcpy(path, "index.html");
+    }
+    else { // html 뿐 아니라 .jpg 같은 경우에도 대응되게 수정 필요 /asdf.qwer 꼴이니 .을 기준으로 문자열을 판별하면 될듯?
+        char tmp[512];
+        strcat(path, ".html");
+        strcpy(tmp, path+1);
+        strcpy(path, tmp);
+    }
+
+    FILE *file = fopen(path, "r"); // 클라이언트에게 보낼 html 파일
+    if(file == NULL) { // 파일이 없을 경우 404 에러 페이지를 출력.
+        char not_found[512];
+        snprintf(not_found, sizeof(not_found), NOT_FOUND_HEADER);
         send(clt_socket, not_found, strlen(not_found), 0);
+        close(clt_socket);
         return;
     }
 
-    char response_buff[BUFF_SIZE];
-    char content_buff[BUFF_SIZE];
-    size_t read_bytes = fread(content_buff, 1, BUFF_SIZE, file);
+    size_t file_size = get_file_size(file); // 파일 크기
+    char response_buff[BUFF_SIZE]; // response가 담긴 버퍼
+    char content_buff[BUFF_SIZE]; // 보낼 파일이 담길 버퍼 
+    ssize_t read_bytes = 0; // 읽은 파일의 바이트 크기
+
+    // HTTP 헤더 먼저 전송
+    char header[512]; // 전송할 헤더용 버퍼
+    snprintf(header, sizeof(header), HTML_HEADER, file_size);
+    send(clt_socket, header, strlen(header), 0);
+    printf("Successfully Sending header:\n%sFile name is %s\nNow Transporting Data...\n", header, path);    
+    
+    // 데이터 전송
+    ssize_t sent = 0; // 보낸 파일의 바이트 크기
+    while((read_bytes = fread(content_buff, 1, BUFF_SIZE, file)) > 0) { // 파일 읽기
+        while(sent < read_bytes) {
+            printf("%ld Bytes Data read\n", read_bytes);
+            ssize_t sending_bytes = send(clt_socket, content_buff + sent, read_bytes - sent, 0); // 클라이언트에게 전송한 파일
+            printf("%ld Bytes Data sent\n", sending_bytes);
+            if (sending_bytes <= 0) { // 파일 전송 실패시 루프 탈출
+                printf("send failed");
+                break;
+            }
+            sent = sent + sending_bytes; // 보낸 바이트 크기 증가
+        }
+    }
+
     fclose(file);
-    
-    snprintf(response_buff, sizeof(response_buff),
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html\r\n"
-            "Content-Length: %ld\r\n"
-            "\r\n%s", read_bytes, content_buff);
-    
-    printf("<Response>\r\n%s", response_buff);
-    send(clt_socket, response_buff, strlen(response_buff), 0);
+
     printf("\r\nSuccessfully sent response to client.\nClosing connection...\r\n");
     close(clt_socket);
 }
@@ -39,8 +77,8 @@ int main(int argc, char **argv) {
     
     int svr_socket; //서버 소켓
     int clt_socket; // 클라이언트 소켓
-    int sin_size; 
-    int recv_len; 
+    int sin_size; // 클라이언트 주소 구조체의 크기
+    int recv_len; // receive의 길이
     char request_buff[BUFF_SIZE];
 
     svr_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -85,8 +123,7 @@ int main(int argc, char **argv) {
         recv_len = recv(clt_socket, request_buff, sizeof(request_buff), 0);
         printf("<Request>\n%s", request_buff); // Request를 출력한다.
 
-        send_response(clt_socket);
-        break;
+        send_response(clt_socket, request_buff); // response를 보낸다.
     }  
     close(svr_socket);
     return 0;
@@ -99,6 +136,8 @@ int main(int argc, char **argv) {
     -> 에러 페이지?
     -> 특정 주소로 들어가면 다른 페이지로 어떻게 이동하지? -> send_response 함수를 수정하면 되나?
         ㄴ request로 오는 문자열에서 경로 정보를 따로 뽑아서 사용하자
+    -> 분할전송 구현 성공
+        ㄴ 그러면 이제 데이터 타입을 구분해서 보낼 수 있게??
 */
 
 /*  만들면서 생겼던 일들
@@ -113,4 +152,5 @@ int main(int argc, char **argv) {
         ㄴ 일단 한번 보내고 접속 종료하기
     버퍼 크기가 8KB인데 8KB를 넘는 이미지 같은건 어떻게 전송하지?
         ㄴ 8KB 단위로 나눠서 반복 전송?
+    
 */
