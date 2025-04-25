@@ -10,6 +10,8 @@
 
 #define BUFF_SIZE 8192
 
+char path[512]; // 파일 디렉토리
+
 long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구하는 함수
     fseek(file, 0, SEEK_END);
     long size = ftell(file);
@@ -17,10 +19,8 @@ long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구�
     return size;
 }
 
-void send_response(int clt_socket, char* request_buff) { // Response를 보내는 함수, 소켓 + 디렉토리
-    // 보낼 파일 경로 추출하기
-    char path[512]; // 파일 디렉토리
-    sscanf(request_buff, "GET %s HTTP/1.1", path); // 파일 디렉토리를 저장하는 버퍼에 request로 받은 디렉토리 저장
+void find_path(char* buff) { // 보낼 파일 경로 추출하는 함수
+    sscanf(buff, "GET %s HTTP/1.1", path); // 파일 디렉토리를 저장하는 버퍼에 request로 받은 디렉토리 저장
     
     if (strcmp(path, "/") == 0) { // 경로가 루트일 경우 index.html
         strcpy(path, "index.html");
@@ -31,6 +31,12 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
         strcpy(tmp, path+1);
         strcpy(path, tmp);
     }
+}
+
+void send_response(int clt_socket, char* request_buff) { // Response를 보내는 함수, 소켓 + 디렉토리
+    // 만들다보니 전체적으로 함수가 너무 거대한데 기능을 따로 빼서 구현해야하나???
+
+    find_path(request_buff); // request에서 경로 추출
 
     FILE *file = fopen(path, "r"); // 클라이언트에게 보낼 html 파일
     if(file == NULL) { // 파일이 없을 경우 404 에러 페이지를 출력.
