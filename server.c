@@ -39,8 +39,8 @@ int main(int argc, char **argv) {
     
     int svr_socket; //서버 소켓
     int clt_socket; // 클라이언트 소켓
-    int sin_size;
-    int recv_len;
+    int sin_size; 
+    int recv_len; 
     char request_buff[BUFF_SIZE];
 
     svr_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         // 접속한 클라이언트의 IP 주소를 출력한다.
         
         recv_len = recv(clt_socket, request_buff, sizeof(request_buff), 0);
-        printf("<Request>\n%s", request_buff);
+        printf("<Request>\n%s", request_buff); // Request를 출력한다.
 
         send_response(clt_socket);
         break;
@@ -112,4 +112,5 @@ int main(int argc, char **argv) {
     근데 메세지가 두번 나옴, 접속이 두번? 루프를 한번 더 돌았나?
         ㄴ 일단 한번 보내고 접속 종료하기
     버퍼 크기가 8KB인데 8KB를 넘는 이미지 같은건 어떻게 전송하지?
+        ㄴ 8KB 단위로 나눠서 반복 전송?
 */
