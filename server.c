@@ -22,6 +22,7 @@ long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구�
 
 void find_type(char* buff) { // 보낼 파일의 타입을 추출하는 함수
     strcpy(file_type, strchr(buff, '.')); // request로 받은 디렉토리 저장
+    printf("File type is %s\n", file_type);
 }
 
 void find_path(char* buff) { // 보낼 파일의 디렉토리를 추출하는 함수
@@ -31,14 +32,14 @@ void find_path(char* buff) { // 보낼 파일의 디렉토리를 추출하는 �
     if (strcmp(path, "/") == 0) { // 경로가 루트일 경우 index.html
         strcpy(path, "index.html");
         find_type(path);
-        printf("File type is %s\n", file_type);
+        printf("File path is %s\n", path);
     }
     else {  
         // http 요청에서 파일 타입을 명시 -> .을 기준으로 문자열 나누기
         // 디랙토리가 다른 파일에 대해서는 어떻게 구현하지?
         strcpy(path, path + 1); // 첫번째 문자를 제거
         find_type(path); // 파일 타입을 추출
-        printf("File type is %s\n", file_type); // 파일 타입을 출력
+        printf("File path is %s\n", path);
     }
 }
 
