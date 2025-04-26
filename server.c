@@ -32,14 +32,14 @@ void find_path(char* buff) { // 보낼 파일의 디렉토리를 추출하는 �
     if (strcmp(path, "/") == 0) { // 경로가 루트일 경우 index.html
         strcpy(path, "index.html");
         find_type(path);
-        printf("File path is %s\n", path);
+        printf("File path is /%s\n", path);
     }
     else {  
         // http 요청에서 파일 타입을 명시 -> .을 기준으로 문자열 나누기
         // 디랙토리가 다른 파일에 대해서는 어떻게 구현하지?
         strcpy(path, path + 1); // 첫번째 문자를 제거
         find_type(path); // 파일 타입을 추출
-        printf("File path is %s\n", path);
+        printf("File path is /%s\n", path);
     }
 }
 
