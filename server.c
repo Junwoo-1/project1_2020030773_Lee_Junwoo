@@ -10,7 +10,8 @@
 
 #define BUFF_SIZE 8192
 
-char path[512]; // 파일 디렉토리
+char path[512]; // 파일 디렉토리 버퍼
+char file_type[10]; // 파일 타입을 저장하는 버퍼
 
 long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구하는 함수
     fseek(file, 0, SEEK_END);
@@ -19,23 +20,30 @@ long get_file_size(FILE *file) { // response로 보낼 파일의 크기를 구�
     return size;
 }
 
-void find_path(char* buff) { // 보낼 파일 경로 추출하는 함수
+void find_type(char* buff) { // 보낼 파일의 타입을 추출하는 함수
+    strcpy(file_type, strchr(buff, '.')); // request로 받은 디렉토리 저장
+}
+
+void find_path(char* buff) { // 보낼 파일의 디렉토리를 추출하는 함수
+    
     sscanf(buff, "GET %s HTTP/1.1", path); // 파일 디렉토리를 저장하는 버퍼에 request로 받은 디렉토리 저장
     
     if (strcmp(path, "/") == 0) { // 경로가 루트일 경우 index.html
         strcpy(path, "index.html");
+        find_type(path);
+        printf("File type is %s\n", file_type);
     }
-    else { // html 뿐 아니라 .jpg 같은 경우에도 대응되게 수정 필요 /asdf.qwer 꼴이니 .을 기준으로 문자열을 판별하면 될듯?
-        char tmp[512];
-        strcat(path, ".html");
-        strcpy(tmp, path+1);
-        strcpy(path, tmp);
+    else {  
+        // http 요청에서 파일 타입을 명시 -> .을 기준으로 문자열 나누기
+        // 디랙토리가 다른 파일에 대해서는 어떻게 구현하지?
+        strcpy(path, path + 1); // 첫번째 문자를 제거
+        find_type(path); // 파일 타입을 추출
+        printf("File type is %s\n", file_type); // 파일 타입을 출력
     }
 }
 
 void send_response(int clt_socket, char* request_buff) { // Response를 보내는 함수, 소켓 + 디렉토리
-    // 만들다보니 전체적으로 함수가 너무 거대한데 기능을 따로 빼서 구현해야하나???
-
+    
     find_path(request_buff); // request에서 경로 추출
 
     FILE *file = fopen(path, "rb"); // 클라이언트에게 보낼 html 파일
@@ -48,18 +56,35 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
     }
 
     size_t file_size = get_file_size(file); // 파일 크기
-    char response_buff[BUFF_SIZE]; // response가 담긴 버퍼
     char content_buff[BUFF_SIZE]; // 보낼 파일이 담길 버퍼 
     ssize_t read_bytes = 0; // 읽은 파일의 바이트 크기
 
     // HTTP 헤더 먼저 전송
     char header[512]; // 전송할 헤더용 버퍼
-    snprintf(header, sizeof(header), HTML_HEADER, file_size); // html, jpg, png 등등 파일 종류 따라서 케이스 나누기
+    if (strcmp(file_type, ".pdf") == 0) { // 타입에 따라 다른 헤더파일 로드
+        snprintf(header, sizeof(header), PDF_HEADER, file_size);
+    } else if (strcmp(file_type, ".zip") == 0) {
+        snprintf(header, sizeof(header), ZIP_HEADER, file_size);
+    } else if (strcmp(file_type, ".jpg") == 0) {
+        snprintf(header, sizeof(header), JPG_HEADER, file_size);
+    } else if (strcmp(file_type, ".jpeg") == 0) {
+        snprintf(header, sizeof(header), JPEG_HEADER, file_size);
+    } else if (strcmp(file_type, ".png") == 0) {
+        snprintf(header, sizeof(header), PNG_HEADER, file_size);
+    } else if (strcmp(file_type, ".mp3") == 0) {
+        snprintf(header, sizeof(header), MP3_HEADER, file_size);
+    } else if (strcmp(file_type, ".wav") == 0) {
+        snprintf(header, sizeof(header), WAV_HEADER, file_size);
+    } else if (strcmp(file_type, ".mp4") == 0) {
+        snprintf(header, sizeof(header), MP4_HEADER, file_size);
+    } else {
+        snprintf(header, sizeof(header), HTML_HEADER, file_size);
+    }
     send(clt_socket, header, strlen(header), 0);
     printf("Successfully Sending header:\n%sFile name is %s\nNow Transporting Data...\n", header, path);    
-    
+
+
     // 데이터 전송
-    char test_buff[25]; // 분할전송 테스트용 버퍼
 
     while((read_bytes = fread(content_buff, 1, BUFF_SIZE, file)) > 0) { // 파일 읽기
         ssize_t sent = 0; // 보낸 파일의 바이트 크기
@@ -74,7 +99,6 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
             sent = sent + sending_bytes; // 보낸 바이트 크기 증가
         }
     }
-
     fclose(file);
 
     printf("\r\nSuccessfully sent response to client.\nClosing connection...\r\n");
@@ -83,10 +107,9 @@ void send_response(int clt_socket, char* request_buff) { // Response를 보내�
 
 int main(int argc, char **argv) {
     
-    int svr_socket; //서버 소켓
-    int clt_socket; // 클라이언트 소켓
-    int sin_size; // 클라이언트 주소 구조체의 크기
-    int recv_len; // receive의 길이
+    socklen_t svr_socket; //서버 소켓
+    socklen_t clt_socket; // 클라이언트 소켓
+    unsigned int sin_size; // 클라이언트 주소 구조체의 크기
     char request_buff[BUFF_SIZE];
 
     svr_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -115,11 +138,10 @@ int main(int argc, char **argv) {
     }
     else {
         printf("Port number %s is now listening....\n", argv[1]);
-    }// 클라이언트의 접속을 기다린다. listen에 실패할 경우 에러를 출력한다.
+    }
+    // 클라이언트의 접속을 기다린다. listen에 실패할 경우 에러를 출력한다.
     
-   
     sin_size = sizeof(struct sockaddr_in); // 클라이언트 주소 구조체의 크기를 저장한다.
-
 
     while (1) {
         if ((clt_socket = accept(svr_socket, (struct sockaddr *)&clt_address, &sin_size)) == -1) {
@@ -128,7 +150,7 @@ int main(int argc, char **argv) {
         printf("server : got connection from %s\n", inet_ntoa(clt_address.sin_addr));
         // 접속한 클라이언트의 IP 주소를 출력한다.
         
-        recv_len = recv(clt_socket, request_buff, sizeof(request_buff), 0);
+        recv(clt_socket, request_buff, sizeof(request_buff), 0);
         printf("<Request>\n%s", request_buff); // Request를 출력한다.
 
         send_response(clt_socket, request_buff); // response를 보낸다.
@@ -139,12 +161,12 @@ int main(int argc, char **argv) {
 
 /*  목표
     서버를 열자 - 성공!
-    response를 구현하자
+    response를 구현하자 - 성공!
     -> html 파일을 읽어서 브라우저로 보내기?
     -> 에러 페이지?
     -> 특정 주소로 들어가면 다른 페이지로 어떻게 이동하지? -> send_response 함수를 수정하면 되나?
         ㄴ request로 오는 문자열에서 경로 정보를 따로 뽑아서 사용하자
-    -> 분할전송 구현 성공
+    -> 분할전송 구현 - 성공!
         ㄴ 그러면 이제 데이터 타입을 구분해서 보낼 수 있게??
 */
 
@@ -160,5 +182,9 @@ int main(int argc, char **argv) {
         ㄴ 일단 한번 보내고 접속 종료하기
     버퍼 크기가 8KB인데 8KB를 넘는 이미지 같은건 어떻게 전송하지?
         ㄴ 8KB 단위로 나눠서 반복 전송?
-    
+    반복전송 구현 성공
+    첫 연결 시 전송이 제대로 안됨...
+        ㄴ 루트 주소일때 주소 갱신
+    /favicon.ico가 뭐지?
+        ㄴ 웹 사이트 아이콘? 16x16, 32x32 크기
 */
